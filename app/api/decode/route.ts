@@ -32,7 +32,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const result = await decodePipeline(domain, {
-    fetcher: (url) => scrapeSite(url),
+    fetcher: (domain) => scrapeSite(`https://${domain}`),
     generator: (input) =>
       generateLeadCard({
         input,
