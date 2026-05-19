@@ -1,3 +1,5 @@
+import { promises as dns } from "node:dns";
+
 export type Resolver = (host: string) => Promise<{ address: string; family: 4 | 6 }>;
 
 export type Fetcher = (url: string, init: RequestInit) => Promise<Response>;
@@ -8,14 +10,126 @@ export interface SafeFetchOpts {
   maxRedirects?: number;
 }
 
-export function isBlockedIp(_ip: string): boolean {
-  throw new Error("not implemented");
+const defaultResolver: Resolver = async (host) => {
+  const { address, family } = await dns.lookup(host);
+  return { address, family: family as 4 | 6 };
+};
+
+const defaultFetcher: Fetcher = (url, init) => fetch(url, init);
+
+function isIPv4Literal(s: string): boolean {
+  if (!/^(\d{1,3}\.){3}\d{1,3}$/.test(s)) return false;
+  return s.split(".").every((n) => {
+    const v = Number(n);
+    return Number.isInteger(v) && v >= 0 && v <= 255;
+  });
 }
 
-export function assertSafeUrl(_url: string, _resolver?: Resolver): Promise<void> {
-  throw new Error("not implemented");
+function isBlockedIPv4(ip: string): boolean {
+  const p = ip.split(".").map(Number);
+  if (p.length !== 4) return false;
+  if (p.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return false;
+  if (p[0] === 127) return true;
+  if (p[0] === 10) return true;
+  if (p[0] === 172 && p[1] >= 16 && p[1] <= 31) return true;
+  if (p[0] === 192 && p[1] === 168) return true;
+  if (p[0] === 169 && p[1] === 254) return true;
+  if (p[0] === 100 && p[1] >= 64 && p[1] <= 127) return true;
+  return false;
 }
 
-export function safeFetch(_url: string, _opts?: SafeFetchOpts): Promise<Response> {
-  throw new Error("not implemented");
+function parseIPv6(ip: string): number[] | null {
+  if (!ip.includes(":")) return null;
+  if (ip.includes(":::")) return null;
+  const doubleColonCount = (ip.match(/::/g) ?? []).length;
+  if (doubleColonCount > 1) return null;
+  let parts: string[];
+  if (doubleColonCount === 0) {
+    parts = ip.split(":");
+    if (parts.length !== 8) return null;
+  } else {
+    const [headStr, tailStr] = ip.split("::");
+    const head = headStr ? headStr.split(":") : [];
+    const tail = tailStr ? tailStr.split(":") : [];
+    const fill = 8 - head.length - tail.length;
+    if (fill < 0) return null;
+    parts = [...head, ...Array(fill).fill("0"), ...tail];
+  }
+  const groups = parts.map((g) => parseInt(g, 16));
+  if (groups.some((n) => Number.isNaN(n) || n < 0 || n > 0xffff)) return null;
+  return groups;
+}
+
+function isBlockedIPv6(ip: string): boolean {
+  const groups = parseIPv6(ip);
+  if (!groups) return false;
+  // ::1 (loopback)
+  if (groups.slice(0, 7).every((g) => g === 0) && groups[7] === 1) return true;
+  // fc00::/7 — first 7 bits of first byte equal 0b1111110
+  const firstByte = (groups[0] >> 8) & 0xff;
+  if ((firstByte & 0xfe) === 0xfc) return true;
+  return false;
+}
+
+export function isBlockedIp(ip: string): boolean {
+  if (isIPv4Literal(ip)) return isBlockedIPv4(ip);
+  if (ip.includes(":")) return isBlockedIPv6(ip);
+  return false;
+}
+
+export async function assertSafeUrl(
+  url: string,
+  resolver: Resolver = defaultResolver,
+): Promise<void> {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Invalid URL: ${url}`);
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`Blocked URL scheme: ${parsed.protocol}`);
+  }
+  let host = parsed.hostname;
+  if (host.startsWith("[") && host.endsWith("]")) {
+    host = host.slice(1, -1);
+  }
+  if (isIPv4Literal(host) || parseIPv6(host) !== null) {
+    if (isBlockedIp(host)) throw new Error(`Blocked IP literal: ${host}`);
+    return;
+  }
+  let result: { address: string; family: 4 | 6 };
+  try {
+    result = await resolver(host);
+  } catch (err) {
+    const code = (err as { code?: string }).code;
+    const reason = code ?? (err instanceof Error ? err.message : String(err));
+    throw new Error(`DNS lookup failed (${reason}): ${host}`);
+  }
+  if (isBlockedIp(result.address)) {
+    throw new Error(`Blocked IP from DNS: ${host} → ${result.address}`);
+  }
+}
+
+export async function safeFetch(url: string, opts: SafeFetchOpts = {}): Promise<Response> {
+  const resolver = opts.resolver ?? defaultResolver;
+  const fetcher = opts.fetcher ?? defaultFetcher;
+  const maxRedirects = opts.maxRedirects ?? 3;
+
+  let currentUrl = url;
+  let redirects = 0;
+
+  while (true) {
+    await assertSafeUrl(currentUrl, resolver);
+    const res = await fetcher(currentUrl, { redirect: "manual" });
+    const isRedirect = res.status >= 300 && res.status < 400 && res.status !== 304;
+    if (!isRedirect) return res;
+    const location = res.headers.get("location");
+    if (!location) return res;
+    if (redirects >= maxRedirects) {
+      throw new Error(`Too many redirects (max ${maxRedirects})`);
+    }
+    redirects += 1;
+    currentUrl = new URL(location, currentUrl).toString();
+  }
 }
