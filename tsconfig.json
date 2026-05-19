@@ -12,16 +12,33 @@
     "jsx": "preserve",
     "allowJs": true,
     "incremental": true,
-    "plugins": [{ "name": "next" }],
-    "types": ["node", "vitest/globals"]
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "types": [
+      "node",
+      "vitest/globals"
+    ],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ]
   },
   "include": [
     "lib/**/*.ts",
     "tests/**/*.ts",
+    "tests/**/*.tsx",
     "app/**/*.ts",
     "app/**/*.tsx",
+    "components/**/*.tsx",
     "next-env.d.ts",
     ".next/types/**/*.ts",
     "vitest.config.ts"
+  ],
+  "exclude": [
+    "node_modules"
   ]
 }
