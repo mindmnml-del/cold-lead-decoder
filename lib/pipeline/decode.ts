@@ -22,9 +22,69 @@ export type DecodeResult =
       message: string;
     };
 
+const DEGRADED_NOTE = "Based on limited public info";
+
+function normalizeDomain(input: string): string {
+  const trimmed = input.trim();
+  if (!trimmed) throw new Error("invalid domain");
+  let s = trimmed.replace(/^https?:\/\//i, "");
+  s = s.split(/[/?#]/, 1)[0];
+  s = s.replace(/^www\./i, "");
+  if (!s || /\s/.test(s) || !s.includes(".")) {
+    throw new Error("invalid domain");
+  }
+  return s.toLowerCase();
+}
+
+function mergeNotes(existing: string | null, addition: string): string {
+  const merged = existing ? `${existing} | ${addition}` : addition;
+  return merged.slice(0, 400);
+}
+
 export async function decodePipeline(
-  _domain: string,
-  _opts: PipelineOpts,
+  domain: string,
+  { fetcher, generator, openerGuard }: PipelineOpts,
 ): Promise<DecodeResult> {
-  throw new Error("Not Implemented");
+  let normalized: string;
+  try {
+    normalized = normalizeDomain(domain);
+  } catch (err) {
+    return {
+      kind: "error",
+      reason: "invalid_domain",
+      message: err instanceof Error ? err.message : "invalid domain",
+    };
+  }
+
+  try {
+    const scrape = await fetcher(normalized);
+
+    const card = await generator({
+      domain: normalized,
+      pageText: scrape.text,
+      sourcePages: scrape.pages,
+      degraded: scrape.degraded,
+    });
+
+    let notes = card.confidence_notes;
+    if (card.degraded && !(notes ?? "").toLowerCase().includes("limited")) {
+      notes = mergeNotes(notes, DEGRADED_NOTE);
+    }
+
+    const verdict = openerGuard(card.personalized_opener);
+    if (!verdict.valid) {
+      notes = mergeNotes(notes, verdict.note);
+    }
+
+    return {
+      kind: "ok",
+      card: notes === card.confidence_notes ? card : { ...card, confidence_notes: notes },
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/Blocked IP from DNS/i.test(message)) {
+      return { kind: "error", reason: "fetch_blocked", message };
+    }
+    return { kind: "error", reason: "decode_failed", message };
+  }
 }
