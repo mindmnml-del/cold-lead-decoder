@@ -39,6 +39,9 @@ No database, no auth, no queue. Optional Vercel KV cache (24h domain → card) i
 ### ADR-008 — Failure UX: every failure has a defined card state, never a raw 500
 Invalid domain → inline field error. Fetch fail/timeout → "Couldn't reach this site". Thin content → card renders with "Based on limited public info" badge. Generic opener (banned-phrase guard) → mark `low_confidence` in `confidence_notes`, do not retry (keeps demo fast). LLM/validation hard fail → "Decode failed, try another domain" + retry button. Source: §4 step 11, §7.
 
+### ADR-009 — UI components: strictly pure Tailwind CSS, no external libraries
+No `shadcn/ui`, Radix, MUI, Headless UI, Chakra, DaisyUI, or any pre-built component kit in v1. All UI primitives (buttons, badges, inputs, skeletons, toasts) are hand-rolled with Tailwind utility classes. Rationale: zero dependency surface, zero bundle bloat, full control over keyboard/ARIA, and no risk of design drift from a third-party theme. `clsx` / `tailwind-merge` may be added later if class composition becomes unwieldy, but are **not** part of v1.
+
 ## Working Agreement
 
 - **Always use `/browse`** for web research and external documentation lookups.
