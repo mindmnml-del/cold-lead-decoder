@@ -31,7 +31,7 @@ DeepSeek's `json_object` mode guarantees parseable JSON, **not schema-valid** JS
 `lib/schema/leadCard.ts` is the contract. Rules enforced in Zod, not just the prompt: `follow_up_angles` length exactly 2; `positioning_signals` 2–4; `likely_pain_points` 2–3; every string non-empty and length-capped; `source_pages` ⊆ pages actually fetched. **Project deviation from arch §5:** `evidence.opener_basis` is **required** in the schema (arch doc had it optional-in-Zod / required-in-prompt; constitution locks it as schema-required to prevent silent prompt drift). Source: §3, §5, §10.
 
 ### ADR-006 — SSRF guard: DNS-resolve and check resolved IP, re-check after every redirect
-String/regex checks on the hostname alone miss DNS-rebinding to internal IPs. Use `dns.promises.lookup` and reject if resolved IP falls in `10/8`, `172.16/12`, `192.168/16`, `127/8`, `169.254/16`, `::1`, `fc00::/7`. Re-apply after each redirect. No shell, pure `fetch`. Source: §4 step 2, §6, §15 SEC-01.
+String/regex checks on the hostname alone miss DNS-rebinding to internal IPs. Use `dns.promises.lookup` and reject if resolved IP falls in `10/8`, `172.16/12`, `192.168/16`, `127/8`, `169.254/16`, `100.64/10` (CGNAT, RFC 6598), `::1`, `fc00::/7`. Re-apply after each redirect. No shell, pure `fetch`. Source: §4 step 2, §6, §15 SEC-01.
 
 ### ADR-007 — Persistence: none in v1
 No database, no auth, no queue. Optional Vercel KV cache (24h domain → card) is feature-flagged. Billing-phase concerns (Prisma singleton, Stripe idempotency, RLS, `org_id` FK) are explicitly deferred. Source: §3, §8, §12, §15.
