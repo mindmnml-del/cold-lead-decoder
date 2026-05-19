@@ -44,7 +44,7 @@ Invalid domain → inline field error. Fetch fail/timeout → "Couldn't reach th
 - **Always use `/browse`** for web research and external documentation lookups.
 - **Always use `/review`** as the quality gate before committing or shipping.
 - **TDD Iron Law:** RED → GREEN → REFACTOR → ANALYZE. No production code before a failing test.
-- **GitNexus commands:** always pass `--skip-agents-md` (e.g., `npx gitnexus analyze --skip-agents-md`).
+- **GitNexus commands:** always invoke the direct binary `gitnexus` (not via `npx`) and always pass `--skip-agents-md`, e.g., `gitnexus analyze --skip-agents-md`. The `npx` shim crashes under Node 20.
 - **Skill invocation:** use slash commands (`/brainstorming`, `/review`), not `superpowers:*` or other namespaced forms.
 - **LLM call shape:** `deepseek-v4-flash`, thinking disabled, `json_object` mode, explicit "return one JSON object only" directive, capped `max_tokens`.
 - **Out of scope for v1** (cut list): headless browser, multi-page crawl, provider router, DB, auth, queue, two-stage prompts, component library, streaming, settings/themes.
