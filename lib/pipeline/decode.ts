@@ -82,7 +82,7 @@ export async function decodePipeline(
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    if (/Blocked IP from DNS/i.test(message)) {
+    if (/Blocked IP from DNS|DNS lookup failed/i.test(message)) {
       return { kind: "error", reason: "fetch_blocked", message };
     }
     return { kind: "error", reason: "decode_failed", message };

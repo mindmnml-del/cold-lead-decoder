@@ -130,6 +130,26 @@ describe("decodePipeline", () => {
     expect(result.message).toContain("10.0.0.5");
   });
 
+  it("[NXDOMAIN] returns an error result with reason fetch_blocked when the fetcher rejects with a DNS lookup failure", async () => {
+    const fetcher = mkFetcher(
+      new Error("DNS lookup failed (ENOTFOUND): nope.example"),
+    ) as unknown as PipelineFetcher;
+    const generator = mkGenerator(validCard) as unknown as PipelineGenerator;
+    const openerGuard = mkGuard({ valid: true }) as unknown as OpenerGuard;
+
+    const result = await decodePipeline("nope.example", {
+      fetcher,
+      generator,
+      openerGuard,
+    });
+
+    expect(result.kind).toBe("error");
+    if (result.kind !== "error") throw new Error("expected error");
+    expect(result.reason).toBe("fetch_blocked");
+    expect(result.message).toContain("DNS lookup failed");
+    expect(result.message).toContain("ENOTFOUND");
+  });
+
   it("[FAILURE MAPPING] returns a degraded card with confidence_notes when the fetcher reports degraded content", async () => {
     const degradedScrape: ScrapeResult = {
       text: "<thin>",
