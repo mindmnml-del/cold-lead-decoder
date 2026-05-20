@@ -5,3 +5,6 @@ node_modules/
 .env.*
 .gitnexus/
 .claude/
+
+.vercel
+tsconfig.tsbuildinfo

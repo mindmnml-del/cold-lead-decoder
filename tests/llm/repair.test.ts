@@ -6,6 +6,7 @@ import {
 } from "../../lib/llm/deepseek";
 import {
   LeadCardValidationError,
+  SYSTEM_PROMPT,
   generateLeadCard,
 } from "../../lib/llm/repair";
 import { LeadCardSchema } from "../../lib/schema/leadCard";
@@ -178,5 +179,24 @@ describe("generateLeadCard — hard fail (ADR-005)", () => {
     expect(Array.isArray(err.attempts[1]!.issues)).toBe(true);
     expect(err.attempts[0]!.issues.length).toBeGreaterThan(0);
     expect(Array.isArray(err.attempts[0]!.issues[0]!.path)).toBe(true);
+  });
+});
+
+describe("SYSTEM_PROMPT behavioral contract", () => {
+  it("prompt contains role anchor as outside sales rep", () => {
+    expect(SYSTEM_PROMPT).toContain("outside sales rep");
+  });
+
+  it("prompt contains BAD/GOOD exemplar pair", () => {
+    expect(SYSTEM_PROMPT).toContain("BAD:");
+    expect(SYSTEM_PROMPT).toContain("GOOD:");
+  });
+
+  it("prompt forbids value-prop summarizing", () => {
+    expect(SYSTEM_PROMPT).toContain("Never summarize what they do");
+  });
+
+  it("prompt scopes opener_basis to trigger justification", () => {
+    expect(SYSTEM_PROMPT).toContain("opener_basis must name WHY that trigger");
   });
 });
