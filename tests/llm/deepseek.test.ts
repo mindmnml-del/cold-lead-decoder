@@ -3,6 +3,7 @@ import {
   DEEPSEEK_BASE_URL,
   DEEPSEEK_MODEL,
   callDeepSeek,
+  wrapRetry,
   type CreateFn,
   type CreateRequest,
   type CreateResponse,
@@ -164,5 +165,43 @@ describe("DeepSeek client — backoff (ADR-004)", () => {
     ).rejects.toBeInstanceOf(HttpError);
 
     expect(create).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("createDeepSeekFn — retry wiring (ADR-004)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("[RETRY WIRING] CreateFn returned by wrapRetry retries on 429 then succeeds", async () => {
+    const origSetTimeout = globalThis.setTimeout;
+    const spy = vi
+      .spyOn(globalThis, "setTimeout")
+      .mockImplementation(((fn: () => void) => {
+        return origSetTimeout(fn, 0);
+      }) as typeof globalThis.setTimeout);
+
+    const rawCreate = vi
+      .fn<[CreateRequest], Promise<CreateResponse>>()
+      .mockRejectedValueOnce(new HttpError(429))
+      .mockResolvedValueOnce(mkResp("{}"));
+
+    const fn: CreateFn = wrapRetry(rawCreate as unknown as CreateFn);
+    const promise = fn({
+      model: DEEPSEEK_MODEL,
+      messages: [{ role: "user", content: "hi" }],
+      response_format: { type: "json_object" },
+      max_tokens: 100,
+    });
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(rawCreate).toHaveBeenCalledTimes(2);
+    expect(result.choices[0]!.message.content).toBe("{}");
+
+    spy.mockRestore();
   });
 });

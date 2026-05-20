@@ -35,21 +35,11 @@ const RETRYABLE_STATUSES = new Set([429, 500, 503]);
 const MAX_RETRIES = 3;
 const BASE_DELAY_MS = 200;
 
-export async function callDeepSeek(
-  opts: CallDeepSeekOpts,
-): Promise<CallDeepSeekResult> {
-  const req: CreateRequest = {
-    model: DEEPSEEK_MODEL,
-    messages: opts.messages,
-    response_format: { type: "json_object" },
-    max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
-  };
-
+async function withBackoff<T>(fn: () => Promise<T>): Promise<T> {
   let attempt = 0;
   for (;;) {
     try {
-      const res = await opts.create(req);
-      return { raw: res.choices?.[0]?.message?.content ?? "" };
+      return await fn();
     } catch (err) {
       const status =
         err && typeof err === "object" && "status" in err
@@ -65,12 +55,29 @@ export async function callDeepSeek(
   }
 }
 
+export function wrapRetry(raw: CreateFn): CreateFn {
+  return (req: CreateRequest) => withBackoff(() => raw(req));
+}
+
+export async function callDeepSeek(
+  opts: CallDeepSeekOpts,
+): Promise<CallDeepSeekResult> {
+  const req: CreateRequest = {
+    model: DEEPSEEK_MODEL,
+    messages: opts.messages,
+    response_format: { type: "json_object" },
+    max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
+  };
+  const res = await withBackoff(() => opts.create(req));
+  return { raw: res.choices?.[0]?.message?.content ?? "" };
+}
+
 export function createDeepSeekFn(apiKey: string): CreateFn {
   // Lazy require so test runtime never touches the openai package.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { OpenAI } = require("openai") as typeof import("openai");
   const client = new OpenAI({ apiKey, baseURL: DEEPSEEK_BASE_URL });
-  return async (req: CreateRequest): Promise<CreateResponse> => {
+  const raw: CreateFn = async (req) => {
     const completion = await client.chat.completions.create({
       model: req.model,
       messages: req.messages,
@@ -82,4 +89,5 @@ export function createDeepSeekFn(apiKey: string): CreateFn {
     });
     return completion as unknown as CreateResponse;
   };
+  return wrapRetry(raw);
 }
