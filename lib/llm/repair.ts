@@ -54,6 +54,8 @@ Required JSON shape:
   "evidence": { "opener_basis": string (1–300, required, non-empty) }
 }
 
+CRITICAL: Frame personalized_opener from the perspective of a seller reaching out TO this company. Do NOT summarize what they do. Instead, identify a concrete detail on their site that gives a reason to reach out (e.g., "I saw you are expanding into X, which is why..."). opener_basis must explain WHY this detail makes the opener relevant — not what the company does.
+
 Use only facts present in the provided page text. Do not invent details.`;
 
 const MAX_TOKENS = 1500;
