@@ -7,8 +7,9 @@ import {
   type Resolver,
 } from "../../lib/scraper/fetch";
 
-const v4 = (address: string): Resolver => async () => ({ address, family: 4 });
-const v6 = (address: string): Resolver => async () => ({ address, family: 6 });
+const v4 = (address: string): Resolver => async () => [address];
+const v6 = (address: string): Resolver => async () => [address];
+const vAll = (...addresses: string[]): Resolver => async () => addresses;
 
 function makeFetcher(steps: Array<{ status: number; location?: string; body?: string }>): {
   fetcher: Fetcher;
@@ -136,6 +137,14 @@ describe("assertSafeUrl — DNS rebinding (public hostname → private IP)", () 
       /ENOTFOUND|lookup/i,
     );
   });
+
+  it("rejects when resolver returns multiple addresses and ANY is in a blocked range", async () => {
+    // Multi-A-record rebinding: first record is public, second is private.
+    // A single-address check would accept this; the guard must reject.
+    await expect(
+      assertSafeUrl("http://multi-a.example/", vAll("8.8.8.8", "10.0.0.1")),
+    ).rejects.toThrow();
+  });
 });
 
 describe("safeFetch — manual redirect with per-hop re-check", () => {
@@ -145,8 +154,8 @@ describe("safeFetch — manual redirect with per-hop re-check", () => {
       { status: 200, body: "<should never be read>" },
     ]);
     const resolver = vi.fn<Resolver>(async (host: string) => {
-      if (host === "good.example") return { address: "8.8.8.8", family: 4 };
-      if (host === "internal.example") return { address: "10.0.0.5", family: 4 };
+      if (host === "good.example") return ["8.8.8.8"];
+      if (host === "internal.example") return ["10.0.0.5"];
       throw new Error(`unexpected host ${host}`);
     });
 
@@ -162,9 +171,7 @@ describe("safeFetch — manual redirect with per-hop re-check", () => {
       { status: 302, location: "http://169.254.169.254/latest/meta-data/" },
     ]);
     const resolver: Resolver = async (host) =>
-      host === "169.254.169.254"
-        ? { address: "169.254.169.254", family: 4 }
-        : { address: "8.8.8.8", family: 4 };
+      host === "169.254.169.254" ? ["169.254.169.254"] : ["8.8.8.8"];
     await expect(
       safeFetch("https://innocent.example/", { resolver, fetcher, maxRedirects: 3 }),
     ).rejects.toThrow();
@@ -178,7 +185,7 @@ describe("safeFetch — manual redirect with per-hop re-check", () => {
       { status: 302, location: "https://d.example/" },
       { status: 200, body: "unreachable" },
     ]);
-    const resolver: Resolver = async () => ({ address: "8.8.8.8", family: 4 });
+    const resolver: Resolver = async () => ["8.8.8.8"];
     await expect(
       safeFetch("https://start.example/", { resolver, fetcher, maxRedirects: 3 }),
     ).rejects.toThrow(/redirect/i);
@@ -190,7 +197,7 @@ describe("safeFetch — manual redirect with per-hop re-check", () => {
       { status: 302, location: "https://final.example/" },
       { status: 200, body: "ok" },
     ]);
-    const resolver: Resolver = async () => ({ address: "8.8.8.8", family: 4 });
+    const resolver: Resolver = async () => ["8.8.8.8"];
     const res = await safeFetch("https://start.example/", {
       resolver,
       fetcher,
@@ -206,7 +213,7 @@ describe("safeFetch — ADR-003 hard caps", () => {
   it("aborts via AbortSignal after 8s timeout", async () => {
     vi.useFakeTimers();
     try {
-      const resolver: Resolver = async () => ({ address: "8.8.8.8", family: 4 });
+      const resolver: Resolver = async () => ["8.8.8.8"];
       const fetcher: Fetcher = (_url, init) =>
         new Promise<Response>((_resolve, reject) => {
           init.signal?.addEventListener("abort", () => {
@@ -226,7 +233,7 @@ describe("safeFetch — ADR-003 hard caps", () => {
   });
 
   it("aborts the body stream when bytes exceed 1.5 MB (no content-length)", async () => {
-    const resolver: Resolver = async () => ({ address: "8.8.8.8", family: 4 });
+    const resolver: Resolver = async () => ["8.8.8.8"];
     const MAX_CHUNKS = 10;
     let chunksRead = 0;
     const stream = new ReadableStream<Uint8Array>({
@@ -249,7 +256,7 @@ describe("safeFetch — ADR-003 hard caps", () => {
   });
 
   it("sends the exact ADR-003 User-Agent header", async () => {
-    const resolver: Resolver = async () => ({ address: "8.8.8.8", family: 4 });
+    const resolver: Resolver = async () => ["8.8.8.8"];
     const inits: RequestInit[] = [];
     const fetcher: Fetcher = async (_url, init) => {
       inits.push(init);

@@ -4,7 +4,14 @@ const TIMEOUT_MS = 8000;
 const BODY_LIMIT_BYTES = 1_500_000;
 const USER_AGENT = "Mozilla/5.0 (compatible; ColdLeadDecoder/1.0)";
 
-export type Resolver = (host: string) => Promise<{ address: string; family: 4 | 6 }>;
+export class SSRFBlockedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SSRFBlockedError";
+  }
+}
+
+export type Resolver = (host: string) => Promise<string[]>;
 
 export type Fetcher = (url: string, init: RequestInit) => Promise<Response>;
 
@@ -15,8 +22,32 @@ export interface SafeFetchOpts {
 }
 
 const defaultResolver: Resolver = async (host) => {
-  const { address, family } = await dns.lookup(host);
-  return { address, family: family as 4 | 6 };
+  const safeResolve = async (
+    fn: (h: string) => Promise<string[]>,
+  ): Promise<string[]> => {
+    try {
+      return await fn(host);
+    } catch (err) {
+      const code = (err as { code?: string }).code;
+      // ENODATA: host has no records of this family (common: A-only or AAAA-only hosts).
+      // ENOTFOUND on a per-family resolve also means "no records of this type" in some
+      // resolver implementations; tolerate it here and let the combined empty result
+      // throw a single synthesized DNS-lookup-failed error below.
+      if (code === "ENODATA" || code === "ENOTFOUND") return [];
+      throw err;
+    }
+  };
+  const [v4Addrs, v6Addrs] = await Promise.all([
+    safeResolve(dns.resolve4),
+    safeResolve(dns.resolve6),
+  ]);
+  const all = [...v4Addrs, ...v6Addrs];
+  if (all.length === 0) {
+    const err = new Error("no addresses") as Error & { code?: string };
+    err.code = "ENODATA";
+    throw err;
+  }
+  return all;
 };
 
 const defaultFetcher: Fetcher = (url, init) => fetch(url, init);
@@ -92,26 +123,31 @@ export async function assertSafeUrl(
     throw new Error(`Invalid URL: ${url}`);
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error(`Blocked URL scheme: ${parsed.protocol}`);
+    throw new SSRFBlockedError(`Blocked URL scheme: ${parsed.protocol}`);
   }
   let host = parsed.hostname;
   if (host.startsWith("[") && host.endsWith("]")) {
     host = host.slice(1, -1);
   }
   if (isIPv4Literal(host) || parseIPv6(host) !== null) {
-    if (isBlockedIp(host)) throw new Error(`Blocked IP literal: ${host}`);
+    if (isBlockedIp(host)) throw new SSRFBlockedError(`Blocked IP literal: ${host}`);
     return;
   }
-  let result: { address: string; family: 4 | 6 };
+  let addresses: string[];
   try {
-    result = await resolver(host);
+    addresses = await resolver(host);
   } catch (err) {
     const code = (err as { code?: string }).code;
     const reason = code ?? (err instanceof Error ? err.message : String(err));
-    throw new Error(`DNS lookup failed (${reason}): ${host}`);
+    throw new SSRFBlockedError(`DNS lookup failed (${reason}): ${host}`);
   }
-  if (isBlockedIp(result.address)) {
-    throw new Error(`Blocked IP from DNS: ${host} → ${result.address}`);
+  if (addresses.length === 0) {
+    throw new SSRFBlockedError(`DNS lookup failed (no addresses): ${host}`);
+  }
+  for (const address of addresses) {
+    if (isBlockedIp(address)) {
+      throw new SSRFBlockedError(`Blocked IP from DNS: ${host} → ${address}`);
+    }
   }
 }
 

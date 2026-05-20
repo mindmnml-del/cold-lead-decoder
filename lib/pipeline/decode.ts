@@ -2,6 +2,7 @@ import type { LeadCard } from "../schema/leadCard";
 import type { ScrapeResult } from "../scraper/extract";
 import type { GenerateLeadCardInput } from "../llm/repair";
 import type { OpenerGuard } from "../opener/guard";
+import { SSRFBlockedError } from "../scraper/fetch";
 
 export type PipelineFetcher = (domain: string) => Promise<ScrapeResult>;
 export type PipelineGenerator = (
@@ -82,7 +83,7 @@ export async function decodePipeline(
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    if (/Blocked IP from DNS|DNS lookup failed/i.test(message)) {
+    if (err instanceof SSRFBlockedError) {
       return { kind: "error", reason: "fetch_blocked", message };
     }
     return { kind: "error", reason: "decode_failed", message };

@@ -8,6 +8,7 @@ import type { OpenerGuard, OpenerGuardResult } from "../../lib/opener/guard";
 import type { LeadCard } from "../../lib/schema/leadCard";
 import type { ScrapeResult } from "../../lib/scraper/extract";
 import type { GenerateLeadCardInput } from "../../lib/llm/repair";
+import { SSRFBlockedError } from "../../lib/scraper/fetch";
 
 const validCard: LeadCard = {
   company_name: "Acme Robotics",
@@ -112,7 +113,7 @@ describe("decodePipeline", () => {
 
   it("[SSRF BLOCK] returns an error result with reason fetch_blocked when the fetcher rejects with a blocked-IP error", async () => {
     const fetcher = mkFetcher(
-      new Error("Blocked IP from DNS: evil.example → 10.0.0.5"),
+      new SSRFBlockedError("Blocked IP from DNS: evil.example → 10.0.0.5"),
     ) as unknown as PipelineFetcher;
     const generator = mkGenerator(validCard) as unknown as PipelineGenerator;
     const openerGuard = mkGuard({ valid: true }) as unknown as OpenerGuard;
@@ -132,7 +133,7 @@ describe("decodePipeline", () => {
 
   it("[NXDOMAIN] returns an error result with reason fetch_blocked when the fetcher rejects with a DNS lookup failure", async () => {
     const fetcher = mkFetcher(
-      new Error("DNS lookup failed (ENOTFOUND): nope.example"),
+      new SSRFBlockedError("DNS lookup failed (ENOTFOUND): nope.example"),
     ) as unknown as PipelineFetcher;
     const generator = mkGenerator(validCard) as unknown as PipelineGenerator;
     const openerGuard = mkGuard({ valid: true }) as unknown as OpenerGuard;

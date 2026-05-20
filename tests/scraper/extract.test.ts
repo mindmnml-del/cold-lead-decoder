@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { scrapeSite } from "../../lib/scraper/extract";
 import type { Fetcher, Resolver } from "../../lib/scraper/fetch";
 
-const publicResolver: Resolver = async () => ({ address: "8.8.8.8", family: 4 });
+const publicResolver: Resolver = async () => ["8.8.8.8"];
 
 function makeFetcher(responses: Record<string, { status: number; body: string }>): {
   fetcher: Fetcher;
