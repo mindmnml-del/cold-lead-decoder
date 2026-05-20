@@ -139,4 +139,40 @@ describe("DomainForm", () => {
     });
     expect(onSuccess).toHaveBeenCalledWith(validLeadCard);
   });
+
+  it("[CHIPS] renders example domain chips", () => {
+    render(<DomainForm />);
+    expect(
+      screen.getByRole("button", { name: /stripe\.com/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /figma\.com/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /plausible\.io/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /geohub\.ge/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("[CHIPS] clicking a chip fills the input", async () => {
+    const user = userEvent.setup();
+    render(<DomainForm />);
+
+    const chip = screen.getByRole("button", { name: /figma\.com/i });
+    await user.click(chip);
+
+    expect(screen.getByRole("textbox")).toHaveValue("figma.com");
+  });
+
+  it("[CHIPS] clicking a chip does NOT submit the form", async () => {
+    const user = userEvent.setup();
+    render(<DomainForm />);
+
+    const chip = screen.getByRole("button", { name: /plausible\.io/i });
+    await user.click(chip);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

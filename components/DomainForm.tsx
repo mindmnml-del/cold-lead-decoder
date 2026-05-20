@@ -18,6 +18,8 @@ type Status =
 
 const FIELD_ERROR = "Enter a valid domain like acme.com";
 
+const EXAMPLE_DOMAINS = ["stripe.com", "figma.com", "plausible.io", "geohub.ge"];
+
 function isLikelyDomain(value: string): boolean {
   const trimmed = value.trim();
   return trimmed.length > 0 && trimmed.includes(".") && !/\s/.test(trimmed);
@@ -177,6 +179,22 @@ export function DomainForm({
             Press Enter · ~12s typical · public site only
           </p>
         )}
+        <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-neutral-600">
+            Try
+          </span>
+          {EXAMPLE_DOMAINS.map((d) => (
+            <button
+              key={d}
+              type="button"
+              onClick={() => setDomain(d)}
+              disabled={isLoading}
+              className="font-mono text-[11px] text-neutral-500 underline decoration-neutral-800 underline-offset-2 transition hover:text-amber-400 hover:decoration-amber-400/40 disabled:opacity-60"
+            >
+              {d}
+            </button>
+          ))}
+        </div>
       </form>
 
       {status.kind === "loading" ? (
