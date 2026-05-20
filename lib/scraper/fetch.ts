@@ -1,5 +1,9 @@
 import { promises as dns } from "node:dns";
 
+const TIMEOUT_MS = 8000;
+const BODY_LIMIT_BYTES = 1_500_000;
+const USER_AGENT = "Mozilla/5.0 (compatible; ColdLeadDecoder/1.0)";
+
 export type Resolver = (host: string) => Promise<{ address: string; family: 4 | 6 }>;
 
 export type Fetcher = (url: string, init: RequestInit) => Promise<Response>;
@@ -111,25 +115,83 @@ export async function assertSafeUrl(
   }
 }
 
+async function enforceBodyLimit(res: Response): Promise<Response> {
+  if (!res.body) return res;
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > BODY_LIMIT_BYTES) {
+        await reader.cancel();
+        throw new Error(
+          `Response body exceeds size limit (${total} > ${BODY_LIMIT_BYTES})`,
+        );
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const buffer = new Uint8Array(total);
+  let offset = 0;
+  for (const c of chunks) {
+    buffer.set(c, offset);
+    offset += c.byteLength;
+  }
+  return new Response(buffer, {
+    status: res.status,
+    statusText: res.statusText,
+    headers: res.headers,
+  });
+}
+
 export async function safeFetch(url: string, opts: SafeFetchOpts = {}): Promise<Response> {
   const resolver = opts.resolver ?? defaultResolver;
   const fetcher = opts.fetcher ?? defaultFetcher;
   const maxRedirects = opts.maxRedirects ?? 3;
 
-  let currentUrl = url;
-  let redirects = 0;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-  while (true) {
-    await assertSafeUrl(currentUrl, resolver);
-    const res = await fetcher(currentUrl, { redirect: "manual" });
-    const isRedirect = res.status >= 300 && res.status < 400 && res.status !== 304;
-    if (!isRedirect) return res;
-    const location = res.headers.get("location");
-    if (!location) return res;
-    if (redirects >= maxRedirects) {
-      throw new Error(`Too many redirects (max ${maxRedirects})`);
+  try {
+    let currentUrl = url;
+    let redirects = 0;
+
+    while (true) {
+      await assertSafeUrl(currentUrl, resolver);
+      const res = await fetcher(currentUrl, {
+        redirect: "manual",
+        signal: controller.signal,
+        headers: { "user-agent": USER_AGENT },
+      });
+      const isRedirect = res.status >= 300 && res.status < 400 && res.status !== 304;
+      if (isRedirect) {
+        const location = res.headers.get("location");
+        if (!location) return res;
+        if (redirects >= maxRedirects) {
+          throw new Error(`Too many redirects (max ${maxRedirects})`);
+        }
+        redirects += 1;
+        currentUrl = new URL(location, currentUrl).toString();
+        continue;
+      }
+
+      const lenHeader = res.headers.get("content-length");
+      if (lenHeader !== null) {
+        const n = Number(lenHeader);
+        if (Number.isFinite(n) && n > BODY_LIMIT_BYTES) {
+          throw new Error(
+            `Response body exceeds size limit (content-length ${n} > ${BODY_LIMIT_BYTES})`,
+          );
+        }
+      }
+      return await enforceBodyLimit(res);
     }
-    redirects += 1;
-    currentUrl = new URL(location, currentUrl).toString();
+  } finally {
+    clearTimeout(timeoutId);
   }
 }

@@ -201,3 +201,70 @@ describe("safeFetch — manual redirect with per-hop re-check", () => {
     expect(calls).toEqual(["https://start.example/", "https://final.example/"]);
   });
 });
+
+describe("safeFetch — ADR-003 hard caps", () => {
+  it("aborts via AbortSignal after 8s timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      const resolver: Resolver = async () => ({ address: "8.8.8.8", family: 4 });
+      const fetcher: Fetcher = (_url, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init.signal?.addEventListener("abort", () => {
+            const err = new Error("aborted") as Error & { name: string };
+            err.name = "AbortError";
+            reject(err);
+          });
+        });
+
+      const promise = safeFetch("https://slow.example/", { resolver, fetcher });
+      const expectation = expect(promise).rejects.toThrow(/timeout|abort/i);
+      await vi.advanceTimersByTimeAsync(8001);
+      await expectation;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("aborts the body stream when bytes exceed 1.5 MB (no content-length)", async () => {
+    const resolver: Resolver = async () => ({ address: "8.8.8.8", family: 4 });
+    const MAX_CHUNKS = 10;
+    let chunksRead = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (chunksRead >= MAX_CHUNKS) {
+          controller.close();
+          return;
+        }
+        chunksRead += 1;
+        controller.enqueue(new Uint8Array(500_000));
+      },
+    });
+    const fetcher: Fetcher = async () =>
+      new Response(stream, { status: 200, headers: { "content-type": "text/html" } });
+
+    await expect(
+      safeFetch("https://big.example/", { resolver, fetcher }),
+    ).rejects.toThrow(/body|size|limit|1\.?5/i);
+    expect(chunksRead).toBeLessThan(MAX_CHUNKS);
+  });
+
+  it("sends the exact ADR-003 User-Agent header", async () => {
+    const resolver: Resolver = async () => ({ address: "8.8.8.8", family: 4 });
+    const inits: RequestInit[] = [];
+    const fetcher: Fetcher = async (_url, init) => {
+      inits.push(init);
+      return new Response("<html></html>", {
+        status: 200,
+        headers: { "content-length": "13", "content-type": "text/html" },
+      });
+    };
+
+    await safeFetch("https://ua.example/", { resolver, fetcher });
+
+    expect(inits).toHaveLength(1);
+    const headers = new Headers(inits[0]?.headers);
+    expect(headers.get("user-agent")).toBe(
+      "Mozilla/5.0 (compatible; ColdLeadDecoder/1.0)",
+    );
+  });
+});
