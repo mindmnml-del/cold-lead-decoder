@@ -13,7 +13,10 @@ type Status =
   | { kind: "idle" }
   | { kind: "loading" }
   | { kind: "field_error"; message: string }
-  | { kind: "decode_error"; reason: "fetch_blocked" | "decode_failed" }
+  | {
+      kind: "decode_error";
+      reason: "fetch_blocked" | "decode_failed" | "rate_limited";
+    }
   | { kind: "success" };
 
 const FIELD_ERROR = "Enter a valid domain like acme.com";
@@ -63,7 +66,11 @@ export function DomainForm({
         const body = (await res.json()) as
           | LeadCardData
           | {
-              reason: "invalid_domain" | "fetch_blocked" | "decode_failed";
+              reason:
+                | "invalid_domain"
+                | "fetch_blocked"
+                | "decode_failed"
+                | "rate_limited";
               message: string;
             };
 
@@ -76,7 +83,11 @@ export function DomainForm({
         const reason = (body as { reason: string }).reason;
         if (reason === "invalid_domain") {
           setStatus({ kind: "field_error", message: FIELD_ERROR });
-        } else if (reason === "fetch_blocked" || reason === "decode_failed") {
+        } else if (
+          reason === "fetch_blocked" ||
+          reason === "decode_failed" ||
+          reason === "rate_limited"
+        ) {
           setStatus({ kind: "decode_error", reason });
         } else {
           setStatus({ kind: "decode_error", reason: "decode_failed" });

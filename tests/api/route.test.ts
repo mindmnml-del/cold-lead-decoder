@@ -7,6 +7,7 @@ vi.mock("../../lib/pipeline/decode", () => ({
 
 import { decodePipeline } from "../../lib/pipeline/decode";
 import { POST } from "../../app/api/decode/route";
+import { __resetRateLimiterForTests } from "../../lib/security/rateLimiter";
 
 const mockedDecode = decodePipeline as unknown as ReturnType<typeof vi.fn>;
 
@@ -52,6 +53,7 @@ function mkRequest(body: unknown): Request {
 describe("POST /api/decode", () => {
   beforeEach(() => {
     mockedDecode.mockReset();
+    __resetRateLimiterForTests();
   });
 
   it("[200] returns card JSON when pipeline returns kind=ok", async () => {
@@ -89,5 +91,46 @@ describe("POST /api/decode", () => {
     });
     const res = await POST(mkRequest({ domain: "acme-robotics.com" }));
     expect(res.status).toBe(500);
+  });
+});
+
+describe("POST /api/decode — rate limiting", () => {
+  beforeEach(() => {
+    mockedDecode.mockReset();
+    __resetRateLimiterForTests();
+  });
+
+  function mkIpRequest(ip: string, body: unknown): Request {
+    return new Request("http://localhost/api/decode", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-forwarded-for": ip,
+      },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it("[429] returns 429 after the limit is exceeded for one IP", async () => {
+    mockedDecode.mockResolvedValue({ kind: "ok", card: fixtureCard });
+    for (let i = 0; i < 5; i++) {
+      const ok = await POST(mkIpRequest("1.2.3.4", { domain: "acme-robotics.com" }));
+      expect(ok.status).toBe(200);
+    }
+    const blocked = await POST(mkIpRequest("1.2.3.4", { domain: "acme-robotics.com" }));
+    expect(blocked.status).toBe(429);
+    expect(await blocked.json()).toEqual({
+      reason: "rate_limited",
+      message: expect.any(String),
+    });
+  });
+
+  it("does not rate-limit requests from a different IP", async () => {
+    mockedDecode.mockResolvedValue({ kind: "ok", card: fixtureCard });
+    for (let i = 0; i < 5; i++) {
+      await POST(mkIpRequest("1.2.3.4", { domain: "acme-robotics.com" }));
+    }
+    const other = await POST(mkIpRequest("9.9.9.9", { domain: "acme-robotics.com" }));
+    expect(other.status).toBe(200);
   });
 });

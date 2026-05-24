@@ -114,6 +114,25 @@ describe("DomainForm", () => {
     });
   });
 
+  it("[HTTP 429] renders DecodeError with rate_limited copy and NO retry button", async () => {
+    fetchMock.mockResolvedValue(
+      mkFetchResponse(429, {
+        reason: "rate_limited",
+        message: "Too many requests. Try again in a minute.",
+      }),
+    );
+    const user = userEvent.setup();
+    render(<DomainForm />);
+
+    await typeAndSubmit(user, "acme.com");
+
+    await waitFor(() => {
+      expect(screen.getByText("Too many requests")).toBeInTheDocument();
+    });
+    expect(screen.getByText(/try again in a minute/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /retry/i })).toBeNull();
+  });
+
   it("[CLIENT GUARD] rejects domain without a dot before any network call", async () => {
     const user = userEvent.setup();
     render(<DomainForm />);

@@ -3,6 +3,10 @@ import { scrapeSite } from "../../../lib/scraper/extract";
 import { generateLeadCard } from "../../../lib/llm/repair";
 import { createDeepSeekFn } from "../../../lib/llm/deepseek";
 import { bannedPhraseGuard } from "../../../lib/opener/guard";
+import {
+  checkRateLimit,
+  extractClientIp,
+} from "../../../lib/security/rateLimiter";
 
 export const runtime = "nodejs";
 
@@ -13,6 +17,17 @@ const STATUS_BY_REASON = {
 } as const;
 
 export async function POST(req: Request): Promise<Response> {
+  const { allowed } = await checkRateLimit(extractClientIp(req));
+  if (!allowed) {
+    return Response.json(
+      {
+        reason: "rate_limited",
+        message: "Too many requests. Try again in a minute.",
+      },
+      { status: 429 },
+    );
+  }
+
   let domain: unknown;
   try {
     const body = (await req.json()) as { domain?: unknown };

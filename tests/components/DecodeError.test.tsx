@@ -23,6 +23,11 @@ const rows: Row[] = [
     message: "Decode failed, try another domain",
     retryExpected: true,
   },
+  {
+    reason: "rate_limited",
+    message: "Too many requests",
+    retryExpected: false,
+  },
 ];
 
 describe("DecodeError", () => {
@@ -42,6 +47,11 @@ describe("DecodeError", () => {
       }
     },
   );
+
+  it("[RATE LIMIT] renders the wait-a-minute body copy for rate_limited", () => {
+    render(<DecodeError reason="rate_limited" />);
+    expect(screen.getByText(/try again in a minute/i)).toBeInTheDocument();
+  });
 
   it("calls onRetry exactly once when retry button is clicked (decode_failed)", async () => {
     const user = userEvent.setup();

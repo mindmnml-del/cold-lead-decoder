@@ -1,6 +1,9 @@
 "use client";
 
-export type DecodeErrorReason = "fetch_blocked" | "decode_failed";
+export type DecodeErrorReason =
+  | "fetch_blocked"
+  | "decode_failed"
+  | "rate_limited";
 
 export interface DecodeErrorProps {
   reason: DecodeErrorReason;
@@ -10,6 +13,7 @@ export interface DecodeErrorProps {
 const TITLES: Record<DecodeErrorReason, string> = {
   fetch_blocked: "Couldn't reach this site",
   decode_failed: "Decode failed, try another domain",
+  rate_limited: "Too many requests",
 };
 
 const BODIES: Record<DecodeErrorReason, string> = {
@@ -17,6 +21,7 @@ const BODIES: Record<DecodeErrorReason, string> = {
     "The site didn't respond, blocked our request, or resolved to an internal address. Try another public domain.",
   decode_failed:
     "We pulled the page but couldn't extract a usable lead. This is usually a JS-heavy site or one with very little public copy.",
+  rate_limited: "Too many requests — try again in a minute.",
 };
 
 function RetryIcon({ size = 12 }: { size?: number }): JSX.Element {
