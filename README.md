@@ -22,7 +22,7 @@ The pipeline accepts an arbitrary, user-supplied domain and forwards parts of a 
 
 ## Evaluation Methodology
 
-- **Automated Testing** — **142 unit and integration tests** passing in Vitest, spanning the schema, the SSRF + body-cap fetch layer, the Readability/cheerio extractor, the DeepSeek wrapper with backoff, the validate-and-repair loop, the rate limiter, the LRU cache, the pipeline orchestrator, the API route, and the React components. Run with `npm test`.
+- **Automated Testing** — **145 unit and integration tests** passing in Vitest, spanning the schema, the SSRF + body-cap fetch layer, the Readability/cheerio extractor, the DeepSeek wrapper with backoff, the validate-and-repair loop, the rate limiter, the LRU cache, the pipeline orchestrator, the API route, and the React components. Run with `npm test`.
 
 - **Qualitative Eval** — a property-based eval harness at `tests/eval/harness.test.ts` runs DeepSeek against five hand-built fixture types in `tests/eval/golden_set.json`:
 
@@ -56,6 +56,7 @@ The linear pipeline:
 - **Zod** — single source of truth for the API and UI contract
 - **`@mozilla/readability`** + `jsdom`, with `cheerio` as fallback
 - **`lru-cache`** — 24-hour per-domain output cache
+- **Neon (Postgres)** — eval metrics persistence via `@neondatabase/serverless`
 - **Vitest** + React Testing Library
 
 ## Setup
