@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  __getStoreSize,
   __resetRateLimiterForTests,
   checkRateLimit,
   extractClientIp,
@@ -35,6 +36,15 @@ describe("checkRateLimit (bucket enforcement)", () => {
     expect(stillBlocked.allowed).toBe(false);
     const afterWindow = await checkRateLimit("1.2.3.4", t0 + 60_001);
     expect(afterWindow.allowed).toBe(true);
+  });
+
+  it("[BUCKET CLEANUP] sweeps stale buckets after window expiry", async () => {
+    const t0 = 2_000_000;
+    for (let i = 0; i < 10; i++) {
+      await checkRateLimit(`ip-${i}`, t0);
+    }
+    await checkRateLimit("ip-new", t0 + 60_001);
+    expect(__getStoreSize()).toBe(1);
   });
 });
 

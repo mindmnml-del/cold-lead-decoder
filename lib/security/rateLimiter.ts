@@ -1,6 +1,7 @@
 type Bucket = number[];
 
 const buckets = new Map<string, Bucket>();
+let lastSweep = 0;
 
 function envInt(name: string, fallback: number): number {
   const raw = process.env[name];
@@ -21,6 +22,12 @@ export async function checkRateLimit(
   now: number = Date.now(),
 ): Promise<RateLimitResult> {
   const cutoff = now - WINDOW_MS;
+  if (now - lastSweep > WINDOW_MS) {
+    for (const [key, timestamps] of buckets.entries()) {
+      if (timestamps.every((t) => t <= cutoff)) buckets.delete(key);
+    }
+    lastSweep = now;
+  }
   const prev = buckets.get(identifier) ?? [];
   const fresh = prev.filter((t) => t > cutoff);
   fresh.push(now);
@@ -30,6 +37,11 @@ export async function checkRateLimit(
 
 export function __resetRateLimiterForTests(): void {
   buckets.clear();
+  lastSweep = 0;
+}
+
+export function __getStoreSize(): number {
+  return buckets.size;
 }
 
 export function extractClientIp(req: Request): string {
