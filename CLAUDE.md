@@ -33,8 +33,8 @@ DeepSeek's `json_object` mode guarantees parseable JSON, **not schema-valid** JS
 ### ADR-006 — SSRF guard: DNS-resolve and check resolved IP, re-check after every redirect
 String/regex checks on the hostname alone miss DNS-rebinding to internal IPs. Use `dns.promises.lookup` and reject if resolved IP falls in `10/8`, `172.16/12`, `192.168/16`, `127/8`, `169.254/16`, `100.64/10` (CGNAT, RFC 6598), `::1`, `fc00::/7`. Re-apply after each redirect. No shell, pure `fetch`. Source: §4 step 2, §6, §15 SEC-01.
 
-### ADR-007 — Persistence: none in v1
-No database, no auth, no queue. Optional Vercel KV cache (24h domain → card) is feature-flagged. Billing-phase concerns (Prisma singleton, Stripe idempotency, RLS, `org_id` FK) are explicitly deferred. Source: §3, §8, §12, §15.
+### ADR-007 — Persistence: eval metrics only
+Storage is allowed exclusively for evaluation run metrics (one row per nightly cron attempt against a fixed domain set). User data, sessions, scraped text, LLM responses, auth, and billing remain explicitly out of scope. The metrics table lives in Neon (Postgres); access is via `@neondatabase/serverless`. Optional Vercel KV cache (24h domain → card) remains feature-flagged. Billing-phase concerns (Prisma singleton, Stripe idempotency, RLS, `org_id` FK) remain deferred. Source: §3, §8, §12, §15.
 
 ### ADR-008 — Failure UX: every failure has a defined card state, never a raw 500
 Invalid domain → inline field error. Fetch fail/timeout → "Couldn't reach this site". Thin content → card renders with "Based on limited public info" badge. Generic opener (banned-phrase guard) → mark `low_confidence` in `confidence_notes`, do not retry (keeps demo fast). LLM/validation hard fail → "Decode failed, try another domain" + retry button. Source: §4 step 11, §7.
