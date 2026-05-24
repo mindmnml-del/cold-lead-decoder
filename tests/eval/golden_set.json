@@ -22,6 +22,7 @@
   {
     "id": "strong_signal",
     "domain": "launchco.example",
+    "triggerKeyword": "agenttrace",
     "mockPageText": "LaunchCo — observability for AI agents. Today (May 18, 2026) we are launching AgentTrace 2.0, a major rewrite that captures full tool-call traces, token-level reasoning, and per-step cost attribution for any agent built on the AI SDK, LangGraph, or our own runtime. AgentTrace 2.0 ships with: (1) deterministic replay — re-run any production trace against a new prompt or model and diff the output; (2) cost guardrails that auto-pause agents exceeding per-session budgets; (3) eval harness integration with Braintrust and LangSmith. Pricing starts at $0 for 10k traces/month; teams plan is $99/mo. We are hiring three senior backend engineers in NYC and remote (US timezones). Our customers include Perplexity, Notion AI, and three Fortune 500 internal AI platforms. Founded 2024 by former Datadog and OpenAI engineers; Series A led by Greylock in October 2025."
   }
 ]

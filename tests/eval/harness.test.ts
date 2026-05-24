@@ -16,7 +16,12 @@ const HAS_KEY = Boolean(process.env.DEEPSEEK_API_KEY);
 describe.skipIf(!HAS_KEY)("eval harness — property-based assertions", () => {
   it.each(goldenSet)(
     "[$id] $domain — card satisfies all properties",
-    async ({ domain, mockPageText }) => {
+    async (fixture: {
+      domain: string;
+      mockPageText: string;
+      triggerKeyword?: string;
+    }) => {
+      const { domain, mockPageText, triggerKeyword } = fixture;
       // Lazy construction: keep OpenAI client out of describe-body execution
       // so the skipIf branch never instantiates a client without an API key.
       const create = createDeepSeekFn(process.env.DEEPSEEK_API_KEY!);
@@ -52,6 +57,12 @@ describe.skipIf(!HAS_KEY)("eval harness — property-based assertions", () => {
       expect(opener.startsWith(name)).toBe(false);
 
       expect(bannedPhraseGuard(card.personalized_opener).valid).toBe(true);
+
+      if (triggerKeyword) {
+        expect(card.personalized_opener).toMatch(
+          new RegExp(triggerKeyword, "i"),
+        );
+      }
     },
     30_000,
   );
