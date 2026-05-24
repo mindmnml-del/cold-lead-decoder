@@ -1,8 +1,9 @@
-import type { LeadCard } from "../schema/leadCard";
+import { LeadCardSchema, type LeadCard } from "../schema/leadCard";
 import type { ScrapeResult } from "../scraper/extract";
 import type { GenerateLeadCardInput } from "../llm/repair";
 import type { OpenerGuard } from "../opener/guard";
 import { SSRFBlockedError } from "../scraper/fetch";
+import { getCached, setCached } from "../cache/domainCache";
 
 export type PipelineFetcher = (domain: string) => Promise<ScrapeResult>;
 export type PipelineGenerator = (
@@ -57,6 +58,18 @@ export async function decodePipeline(
     };
   }
 
+  const cacheEnabled = process.env.ENABLE_CACHE === "true";
+
+  if (cacheEnabled) {
+    const cached = getCached(normalized);
+    if (cached !== undefined) {
+      const parsed = LeadCardSchema.safeParse(cached);
+      if (parsed.success) {
+        return { kind: "ok", card: parsed.data };
+      }
+    }
+  }
+
   try {
     const scrape = await fetcher(normalized);
 
@@ -77,10 +90,14 @@ export async function decodePipeline(
       notes = mergeNotes(notes, verdict.note);
     }
 
-    return {
-      kind: "ok",
-      card: notes === card.confidence_notes ? card : { ...card, confidence_notes: notes },
-    };
+    const finalCard =
+      notes === card.confidence_notes ? card : { ...card, confidence_notes: notes };
+
+    if (cacheEnabled) {
+      setCached(normalized, finalCard);
+    }
+
+    return { kind: "ok", card: finalCard };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (err instanceof SSRFBlockedError) {
