@@ -1,67 +1,78 @@
 # Cold Lead Decoder
 
-> Turn company domains into outreach-ready lead cards in under 15 seconds.
+> Domain in → structured, evidence-grounded lead card out.
 
-Paste a company domain, get back a structured lead card with a personalized opener, positioning signals, likely pain points, and follow-up angles — all grounded in the company's own public website copy.
+**Live demo:** _Vercel deployment URL — TBD_
 
-## Key Features
+## What it does
 
-- **Hardened SSRF protection** — DNS-resolves every host (and every redirect target) and rejects responses pointing at private, loopback, link-local, or CGNAT IP ranges before any data is read.
-- **DeepSeek-powered extraction** — Uses `deepseek-v4-flash` in strict JSON mode with thinking disabled and exponential backoff on 429/500/503, plus a single Zod-driven repair retry on validation failure.
-- **Zod-validated cards** — The lead card schema is the single source of truth, shared between the API and the UI. The model never has the last word on shape.
-- **Graceful degradation for JS-heavy sites** — Thin homepages trigger a conditional `/about` fetch; if content is still sparse the card is marked `degraded: true` and rendered with a "Based on limited public info" badge rather than aborted.
+Cold Lead Decoder is a single-route service for B2B outbound research. A user pastes a company domain; the app statically scrapes the homepage (and, conditionally, `/about`), runs the extracted text through DeepSeek in strict JSON mode, validates the response against a Zod contract, and returns a lead card containing a one-paragraph summary, positioning signals, likely pain points, a personalized opener grounded in a concrete trigger from the company's own pages, and two follow-up angles. There is no database, no auth, and no queue — the whole pipeline lives in one Node route handler (`POST /api/decode`) and runs a linear five-stage flow: **fetch → extract → generate → validate → guard**.
+
+## Threat Model
+
+The pipeline accepts an arbitrary, user-supplied domain and forwards parts of a third-party HTML response to an LLM. Defense-in-depth controls live at every layer:
+
+- **SSRF Protection** — `safeFetch` resolves every host with both `dns.resolve4` and `dns.resolve6` and rejects the request if *any* resolved address falls in a private, loopback, link-local, RFC-6598 CGNAT, or ULA (`fc00::/7`) range. Redirects are followed manually with `redirect: "manual"`, and the full DNS check is re-applied on every hop — a DNS-rebinding attempt against a 30x target is caught before its body is read. Source: `lib/scraper/fetch.ts`.
+
+- **Prompt Injection** — scraped page text is wrapped in `<website_content>…</website_content>` tags inside the user message, and `<` / `>` inside the payload are entity-escaped (`escapeXmlTags` in `lib/llm/utils.ts`) so an attacker cannot close the tag from inside the page. The system prompt has an explicit security clause instructing the model to treat everything inside the tags as data, never as instructions, and to ignore role declarations or admin overrides embedded in the page. Source: `lib/llm/repair.ts`.
+
+- **Rate Limiting** — an in-memory **sliding-window** limiter keyed on client IP, defaulting to 5 requests per 60 seconds (overridable via `RATE_LIMIT_MAX` and `RATE_LIMIT_WINDOW_MS`). Buckets are cleaned via a **lazy sweep** that runs at most once per window, so memory usage stays bounded without a background timer. Source: `lib/security/rateLimiter.ts`.
+
+- **Cost Protection** — every outbound fetch has an 8-second timeout, follows at most 3 redirects, and is capped at **1,500,000 bytes (~1.5 MB)** of body — enforced both via the `content-length` header and a streaming guard that aborts mid-read. Combined homepage + `/about` text is truncated to **12,000 characters** before reaching the LLM (`TEXT_BUDGET` in `lib/scraper/extract.ts`). A per-domain LRU output cache (`lru-cache`, max 500 entries, 24-hour TTL) eliminates redundant DeepSeek calls. Sources: `lib/scraper/fetch.ts`, `lib/scraper/extract.ts`, `lib/cache/domainCache.ts`.
+
+## Evaluation Methodology
+
+- **Automated Testing** — **142 unit and integration tests** passing in Vitest, spanning the schema, the SSRF + body-cap fetch layer, the Readability/cheerio extractor, the DeepSeek wrapper with backoff, the validate-and-repair loop, the rate limiter, the LRU cache, the pipeline orchestrator, the API route, and the React components. Run with `npm test`.
+
+- **Qualitative Eval** — a property-based eval harness at `tests/eval/harness.test.ts` runs DeepSeek against five hand-built fixture types in `tests/eval/golden_set.json`:
+
+  | Fixture        | What it stresses                                                              |
+  |----------------|-------------------------------------------------------------------------------|
+  | `normal`       | rich homepage with multiple concrete triggers (launch, customer, fundraise)   |
+  | `degraded`     | thin "coming soon" page → must mark `degraded: true` and avoid fabrication    |
+  | `injection`    | embedded `IGNORE ALL PREVIOUS INSTRUCTIONS` payload — schema must hold        |
+  | `no_trigger`   | vague consulting boilerplate — opener must not invent a trigger               |
+  | `strong_signal`| explicit recent launch — opener must reference the trigger keyword            |
+
+  Each fixture asserts: Zod-shape validity, a non-empty `evidence.opener_basis`, exactly 2 `follow_up_angles`, banned-phrase compliance on the opener, and (for `strong_signal`) a regex match on the trigger keyword. The eval suite is gated on `DEEPSEEK_API_KEY` and is skipped automatically when the key is absent.
+
+## Architecture Decisions
+
+The full set of decisions — framework, runtime, scraping strategy, LLM contract, schema authority, SSRF policy, persistence, failure UX, UI dependencies — is recorded in [`CLAUDE.md`](./CLAUDE.md#architecture-decision-records) as ADR-001 through ADR-009.
+
+The linear pipeline:
+
+1. **fetch** — `lib/scraper/fetch.ts` — SSRF guard + timeout + body cap + per-hop redirect re-check.
+2. **extract** — `lib/scraper/extract.ts` — `@mozilla/readability` (primary), `cheerio` (fallback), conditional `/about` retry, 12k-character text budget.
+3. **generate** — `lib/llm/repair.ts` + `lib/llm/deepseek.ts` — DeepSeek call in `json_object` mode with thinking disabled, plus one repair attempt on Zod failure.
+4. **validate** — `lib/schema/leadCard.ts` — the Zod schema is the contract; the model never has the last word on shape.
+5. **guard** — `lib/opener/guard.ts` + `lib/pipeline/decode.ts` — banned-phrase check on the opener; failures stamp `confidence_notes` rather than retry.
 
 ## Tech Stack
 
-- **Framework**: Next.js 14 (App Router, TypeScript)
-- **LLM**: DeepSeek (`deepseek-v4-flash`) via the OpenAI SDK
-- **Validation**: Zod
-- **Scraping**: `fetch` + `@mozilla/readability` + `jsdom`, with `cheerio` as fallback
-- **Styling**: Tailwind CSS — no component library (see ADR-009)
-- **Tests**: Vitest + React Testing Library
+- **Next.js 14** (App Router, Node runtime)
+- **TypeScript**
+- **DeepSeek `deepseek-v4-flash`** via the OpenAI SDK (`response_format: { type: "json_object" }`, thinking disabled, exponential backoff on 429/500/503)
+- **Zod** — single source of truth for the API and UI contract
+- **`@mozilla/readability`** + `jsdom`, with `cheerio` as fallback
+- **`lru-cache`** — 24-hour per-domain output cache
+- **Vitest** + React Testing Library
 
 ## Setup
 
 Requirements: Node.js 20+ and a DeepSeek API key.
 
-1. Install dependencies:
+```bash
+npm install
+echo "DEEPSEEK_API_KEY=sk-..." > .env.local
+npm run dev
+```
 
-   ```bash
-   npm install
-   ```
-
-2. Create `.env.local` in the project root with your DeepSeek key:
-
-   ```
-   DEEPSEEK_API_KEY=sk-...
-   ```
-
-   Get a key from <https://platform.deepseek.com/api_keys>. `.env.local` is gitignored.
-
-3. Run the dev server:
-
-   ```bash
-   npm run dev
-   ```
-
-   Open <http://localhost:3000> and paste a domain like `stripe.com`.
-
-To run the test suite:
+Open <http://localhost:3000> and paste a domain like `stripe.com`. To run the test suite:
 
 ```bash
 npm test
 ```
-
-## Architecture
-
-A single Node Route Handler — `POST /api/decode` — runs a linear four-stage pipeline. There is no database, no auth, and no queue in v1.
-
-1. **Scrape** — `safeFetch` enforces the SSRF policy, follows up to 3 redirects, caps the body at ~1.5 MB, and re-applies the policy on every hop.
-2. **Extract** — `@mozilla/readability` pulls the main content; `cheerio` is the fallback. Thin homepages trigger a single `/about` retry; if both are sparse the result is marked `degraded`.
-3. **Generate** — A system prompt that pins the exact JSON shape calls DeepSeek in `json_object` mode. The response is parsed and validated against the Zod schema; on failure the model gets one repair attempt with the list of validation issues, then hard-fails to `decode_failed`.
-4. **Guard** — A banned-phrase check on the `personalized_opener` stamps `confidence_notes` if the model regresses to generic fluff like *"I hope this finds you well"*.
-
-All nine architectural decisions (framework, runtime, scraping strategy, LLM contract, schema authority, SSRF policy, persistence, failure UX, UI dependencies) are recorded in [`CLAUDE.md`](./CLAUDE.md) as ADR-001 through ADR-009.
 
 ## License
 
