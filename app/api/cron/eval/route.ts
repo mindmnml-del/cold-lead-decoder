@@ -2,6 +2,7 @@ import { decodeDomain } from "../../../../lib/pipeline/decodeDomain";
 import { saveEvalRun, __initDatabase } from "../../../../lib/db/evalStore";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const DOMAINS = [
   "stripe.com",
