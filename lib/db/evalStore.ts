@@ -58,9 +58,6 @@ export interface EvalSummary {
 
 export async function getWeeklyMetrics(): Promise<EvalSummary> {
   const sql = getClient();
-  const dbHost = (() => {
-    try { return new URL(process.env.DATABASE_URL || "").hostname; } catch { return "unparseable"; }
-  })();
   const rows = (await sql`
     SELECT success, latency_ms, repair_used, banned_phrase_triggered, timestamp
     FROM eval_runs
@@ -72,7 +69,6 @@ export async function getWeeklyMetrics(): Promise<EvalSummary> {
     banned_phrase_triggered: boolean | null;
     timestamp: Date | string;
   }>;
-  console.log(`[getWeeklyMetrics] dbHost=${dbHost} rowCount=${rows.length}`);
 
   if (rows.length === 0) {
     return {
