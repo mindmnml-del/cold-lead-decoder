@@ -24,7 +24,7 @@ Not Edge (Readability/jsdom need Node). Not Server Action (no curlable contract,
 ### ADR-003 — Scraping: static `fetch` + Readability/cheerio, homepage + conditional `/about`
 No headless browser in v1. Detect thin content → fetch `/about` once → if still thin, set `degraded=true` and continue (never abort). Hard caps: 8s timeout, ≤3 redirects, ~1.5 MB body cap, real User-Agent. Source: §4, §6, §13.
 
-### ADR-004 — LLM: DeepSeek `deepseek-v4-flash`, thinking disabled, JSON mode + mandatory repair retry
+### ADR-004 — LLM: DeepSeek `deepseek-chat`, thinking disabled, JSON mode + mandatory repair retry
 DeepSeek's `json_object` mode guarantees parseable JSON, **not schema-valid** JSON (no Anthropic-style tool enforcement). System prompt must explicitly direct the model to return a single JSON object. Backoff on 429/500/503. One repair call on Zod failure. Hard fail after second failure. Source: §3, §4 steps 7–8, §8, §10, §14.
 
 ### ADR-005 — Schema: Zod as single source of truth, shared by API + UI
