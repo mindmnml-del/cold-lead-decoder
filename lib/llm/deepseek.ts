@@ -23,7 +23,6 @@ export interface CallDeepSeekOpts {
   create: CreateFn;
   messages: ChatMessage[];
   maxTokens?: number;
-  signal?: AbortSignal;
 }
 
 export interface CallDeepSeekResult {

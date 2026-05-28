@@ -53,7 +53,7 @@ describe("personalized_opener — buyer-framing pin (ADR-004)", () => {
     expect(LeadCardSchema.safeParse(buyerFramedCard).success).toBe(true);
 
     const create = vi
-      .fn<[CreateRequest], Promise<CreateResponse>>()
+      .fn<(req: CreateRequest) => Promise<CreateResponse>>()
       .mockResolvedValueOnce(mkResp(JSON.stringify(buyerFramedCard)));
 
     const card = await generateLeadCard({

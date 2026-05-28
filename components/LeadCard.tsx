@@ -76,17 +76,52 @@ function BulletList({ items }: { items: readonly string[] }): JSX.Element {
   );
 }
 
+function SourceLinks({ urls }: { urls: readonly string[] }): JSX.Element | null {
+  if (urls.length === 0) return null;
+  const seen = new Set<string>();
+  const items: { href: string; label: string }[] = [];
+  for (const u of urls) {
+    let host: string;
+    try {
+      host = new URL(u).hostname;
+    } catch {
+      host = u;
+    }
+    if (seen.has(host)) continue;
+    seen.add(host);
+    items.push({ href: u, label: host });
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 normal-case tracking-normal">
+      <span className="text-[10px] uppercase tracking-[0.18em] text-neutral-600">
+        Sources
+      </span>
+      {items.map((it) => (
+        <a
+          key={it.href}
+          href={it.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-neutral-500 hover:text-neutral-300 hover:underline"
+        >
+          {it.label}
+        </a>
+      ))}
+    </div>
+  );
+}
+
 export function LeadCard({ card }: LeadCardProps): JSX.Element {
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "ok" | "err">("idle");
 
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(card.personalized_opener);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
+      setCopyState("ok");
     } catch {
-      // clipboard not available — silently ignore in v1
+      setCopyState("err");
     }
+    window.setTimeout(() => setCopyState("idle"), 2000);
   };
 
   const monogram = card.company_name.charAt(0).toUpperCase();
@@ -157,12 +192,18 @@ export function LeadCard({ card }: LeadCardProps): JSX.Element {
             type="button"
             onClick={handleCopy}
             aria-label="Copy opener to clipboard"
-            className="inline-flex items-center gap-1.5 rounded-md bg-amber-400 px-3 py-1.5 text-[12px] font-medium text-neutral-950 transition hover:bg-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:ring-offset-2 focus:ring-offset-neutral-950"
+            className={
+              copyState === "err"
+                ? "inline-flex items-center gap-1.5 rounded-md bg-red-500/20 px-3 py-1.5 text-[12px] font-medium text-red-200 ring-1 ring-inset ring-red-500/40 transition focus:outline-none focus:ring-2 focus:ring-red-400/40 focus:ring-offset-2 focus:ring-offset-neutral-950"
+                : "inline-flex items-center gap-1.5 rounded-md bg-amber-400 px-3 py-1.5 text-[12px] font-medium text-neutral-950 transition hover:bg-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:ring-offset-2 focus:ring-offset-neutral-950"
+            }
           >
-            {copied ? (
+            {copyState === "ok" ? (
               <>
                 <CheckIcon /> Copied
               </>
+            ) : copyState === "err" ? (
+              <>Copy failed</>
             ) : (
               <>
                 <CopyIcon /> Copy opener
@@ -203,10 +244,7 @@ export function LeadCard({ card }: LeadCardProps): JSX.Element {
 
       {/* Footer */}
       <footer className="mt-6 flex items-center justify-between gap-4 border-t border-neutral-800/60 pt-4 font-mono text-[10px] uppercase tracking-[0.18em] text-neutral-600">
-        <span>
-          Sources{" "}
-          <span className="ml-1.5 text-neutral-400">{card.source_pages.length}</span>
-        </span>
+        <SourceLinks urls={card.source_pages} />
         {card.confidence_notes ? (
           <span className="flex max-w-[60%] items-center gap-1.5 normal-case tracking-normal text-amber-400/70">
             <span className="h-1 w-1 shrink-0 rounded-full bg-amber-400/70" />

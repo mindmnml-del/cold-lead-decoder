@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import goldenSet from "./golden_set.json";
 import {
@@ -12,8 +13,9 @@ import { createDeepSeekFn } from "../../lib/llm/deepseek";
 import type { ScrapeResult } from "../../lib/scraper/extract";
 
 const HAS_KEY = Boolean(process.env.DEEPSEEK_API_KEY);
+const RUN_EVAL = process.env.RUN_EVAL === "true";
 
-describe.skipIf(!HAS_KEY)("eval harness — property-based assertions", () => {
+describe.skipIf(!HAS_KEY || !RUN_EVAL)("eval harness — property-based assertions", () => {
   it.each(goldenSet)(
     "[$id] $domain — card satisfies all properties",
     async (fixture: {

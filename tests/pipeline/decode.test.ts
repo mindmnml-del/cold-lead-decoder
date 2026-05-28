@@ -52,25 +52,29 @@ const healthyScrape: ScrapeResult = {
 
 function mkFetcher(
   result: ScrapeResult | Error,
-): ReturnType<typeof vi.fn<[string], Promise<ScrapeResult>>> {
+): ReturnType<typeof vi.fn<(domain: string) => Promise<ScrapeResult>>> {
   if (result instanceof Error) {
-    return vi.fn<[string], Promise<ScrapeResult>>(async () => {
+    return vi.fn<(domain: string) => Promise<ScrapeResult>>(async () => {
       throw result;
     });
   }
-  return vi.fn<[string], Promise<ScrapeResult>>(async () => result);
+  return vi.fn<(domain: string) => Promise<ScrapeResult>>(async () => result);
 }
 
 function mkGenerator(
   card: LeadCard,
-): ReturnType<typeof vi.fn<[GenerateLeadCardInput], Promise<LeadCard>>> {
-  return vi.fn<[GenerateLeadCardInput], Promise<LeadCard>>(async () => card);
+): ReturnType<
+  typeof vi.fn<(input: GenerateLeadCardInput) => Promise<LeadCard>>
+> {
+  return vi.fn<(input: GenerateLeadCardInput) => Promise<LeadCard>>(
+    async () => card,
+  );
 }
 
 function mkGuard(
   outcome: OpenerGuardResult,
-): ReturnType<typeof vi.fn<[string], OpenerGuardResult>> {
-  return vi.fn<[string], OpenerGuardResult>(() => outcome);
+): ReturnType<typeof vi.fn<(opener: string) => OpenerGuardResult>> {
+  return vi.fn<(opener: string) => OpenerGuardResult>(() => outcome);
 }
 
 describe("decodePipeline", () => {

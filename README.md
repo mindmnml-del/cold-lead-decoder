@@ -2,7 +2,7 @@
 
 > Domain in → structured, evidence-grounded lead card out.
 
-**Live demo:** _Vercel deployment URL — TBD_
+**Live demo:** https://coldl.vercel.app
 
 ## What it does
 
@@ -52,7 +52,7 @@ The linear pipeline:
 
 - **Next.js 14** (App Router, Node runtime)
 - **TypeScript**
-- **DeepSeek `deepseek-v4-flash`** via the OpenAI SDK (`response_format: { type: "json_object" }`, thinking disabled, exponential backoff on 429/500/503)
+- **DeepSeek `deepseek-chat`** (intentionally used over `deepseek-v4-flash` for JSON mode reliability; v4-flash can be re-evaluated via A/B eval harness when needed) via the OpenAI SDK (`response_format: { type: "json_object" }`, thinking disabled, exponential backoff on 429/500/503)
 - **Zod** — single source of truth for the API and UI contract
 - **`@mozilla/readability`** + `jsdom`, with `cheerio` as fallback
 - **`lru-cache`** — 24-hour per-domain output cache

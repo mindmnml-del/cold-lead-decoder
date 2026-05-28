@@ -6,7 +6,7 @@ status: architecture-locked
 recommended_stack: Next.js 14 (App Router, TS) + one Node route handler + DeepSeek (OpenAI SDK) + Zod + cheerio/readability + Tailwind + Vercel
 ---
 
-> **Change note (2026-05-19): LLM provider switched from Anthropic → DeepSeek.** It's one provider swap, but it has two non-cosmetic consequences baked into the sections below: (1) DeepSeek has **no strict tool/schema-enforced structured output** like Anthropic — you get `response_format: {type:"json_object"}` (valid JSON only, *not* schema-valid), so **Zod + the repair retry move from "recommended" to load-bearing and mandatory**; (2) DeepSeek throttles with **HTTP 429 under concurrency**, which is a real *live-demo* risk and adds a retry/backoff requirement + makes the optional cache a demo-warming tactic. Model: **`deepseek-v4-flash`, thinking disabled** (do *not* use legacy `deepseek-chat`/`deepseek-reasoner` — they retire 2026-07-24). Everything else in this doc stands.
+> **Change note (2026-05-19): LLM provider switched from Anthropic → DeepSeek.** It's one provider swap, but it has two non-cosmetic consequences baked into the sections below: (1) DeepSeek has **no strict tool/schema-enforced structured output** like Anthropic — you get `response_format: {type:"json_object"}` (valid JSON only, *not* schema-valid), so **Zod + the repair retry move from "recommended" to load-bearing and mandatory**; (2) DeepSeek throttles with **HTTP 429 under concurrency**, which is a real *live-demo* risk and adds a retry/backoff requirement + makes the optional cache a demo-warming tactic. Model: **`deepseek-chat`, thinking disabled** (intentionally used over `deepseek-v4-flash` for JSON mode reliability; v4-flash can be re-evaluated via A/B eval harness when needed). Everything else in this doc stands.
 
 # Cold Lead Decoder — MVP Architecture Brainstorm
 
@@ -51,7 +51,7 @@ No code yet. This is the thinking pass. Opinionated, MVP-first, solo-builder-pac
 | Frontend | Next.js App Router, one page, Tailwind, client component posts to API |
 | Backend | One **Route Handler** `POST /api/decode` (Node runtime, not Edge) |
 | Scraping | `fetch()` + `@mozilla/readability` (fallback `cheerio`), homepage + conditional `/about` |
-| LLM | One DeepSeek `deepseek-v4-flash` call (OpenAI SDK, thinking disabled) in `json_object` mode, **mandatory** repair retry |
+| LLM | One DeepSeek `deepseek-chat` call (OpenAI SDK, thinking disabled) in `json_object` mode, **mandatory** repair retry |
 | Schema/validation | **Zod schema = single source of truth**, shared by API + UI |
 | Rendering | Client renders typed view model from validated JSON |
 | Deployment | Vercel; optional Vercel KV cache keyed by domain (24h) |
@@ -98,7 +98,7 @@ One Next.js app, one Node route handler, static scrape with readability, one Dee
 4. **Content cleanup.** Run Readability; fall back to `cheerio` (strip `script/style/nav/footer`, take main text). Collapse whitespace. Measure usable text length.
 5. **Thin-content check.** If usable text < ~600 chars, fetch `/about` (and try `/about-us`) once, same rules, concatenate. If still thin → set `degraded=true` and continue with whatever exists (do **not** abort).
 6. **Truncate.** Cap combined text to ~10–12k chars (front-load homepage). This bounds cost and latency.
-7. **Structured extraction.** One DeepSeek call (`deepseek-v4-flash`, thinking disabled): system prompt (role + rules) + user prompt (cleaned text + the JSON contract) with `response_format: { type: "json_object" }`. **The prompt must explicitly instruct the model to respond with JSON** — DeepSeek's JSON mode requires this, and without it the model can emit an unbounded whitespace stream that hangs the request until `max_tokens`. Always set a sane `max_tokens`.
+7. **Structured extraction.** One DeepSeek call (`deepseek-chat`, thinking disabled): system prompt (role + rules) + user prompt (cleaned text + the JSON contract) with `response_format: { type: "json_object" }`. **The prompt must explicitly instruct the model to respond with JSON** — DeepSeek's JSON mode requires this, and without it the model can emit an unbounded whitespace stream that hangs the request until `max_tokens`. Always set a sane `max_tokens`.
 8. **Response validation.** Zod-parse the model output. On failure: one **repair call** ("your previous output failed validation with these errors; return corrected JSON only"). On second failure → structured error.
 9. **Business-reasoning quality gate (cheap, local).** Reject/flag an opener that contains banned generic phrases ("I hope this finds you well", "I came across your company", "as a leading provider"). If flagged → mark `low_confidence` in `confidence_notes` rather than retry (keeps demo fast).
 10. **UI rendering.** Client receives validated JSON, renders the typed card. Opener block is visually dominant + copy-to-clipboard with confirmation.
@@ -155,7 +155,7 @@ Hard guards: timeout, body-size cap, redirect cap, real UA, and an **SSRF guard 
 | Weak/absent About page | Small or marketing-thin company | Homepage is primary anyway | Card from homepage only; `confidence_notes` set |
 | Generic opener | The core risk | Force `evidence.opener_basis`; reject banned phrases locally | Show `confidence_notes`: "Limited specific signals found" |
 | Hallucinated signals | Model fills gaps | "Use only the provided text" + `source_pages` subset check | Drop unverifiable signals |
-| Slow response | Scrape + LLM latency | 8s fetch timeout, capped input, `deepseek-v4-flash` thinking disabled, capped `max_tokens` | Skeleton card + status text |
+| Slow response | Scrape + LLM latency | 8s fetch timeout, capped input, `deepseek-chat` thinking disabled, capped `max_tokens` | Skeleton card + status text |
 | **DeepSeek 429 / throttle** | DeepSeek limits concurrency | Exponential backoff on 429/500/503; pre-warm cache for demo domains | "High demand — retrying…" then result |
 | Schema breakage | LLM drift / non-schema JSON | `json_object` mode + Zod + mandatory repair retry | Hard fail after retry → clean error + retry button, never raw 500 |
 
@@ -168,7 +168,7 @@ Hard guards: timeout, body-size cap, redirect cap, real UA, and an **SSRF guard 
 - **Framework:** Next.js 14, App Router, TypeScript
 - **API:** one Route Handler `POST /api/decode`, **Node runtime** (not Edge)
 - **Scraping:** native `fetch` + `@mozilla/readability` + `jsdom`, `cheerio` as fallback
-- **LLM:** DeepSeek via OpenAI SDK (`baseURL: "https://api.deepseek.com"`). Model `deepseek-v4-flash`, thinking disabled, `json_object` mode, capped `max_tokens`, backoff on 429/500/503. Behind a single `extractLeadCard()` function.
+- **LLM:** DeepSeek via OpenAI SDK (`baseURL: "https://api.deepseek.com"`). Model `deepseek-chat`, thinking disabled, `json_object` mode, capped `max_tokens`, backoff on 429/500/503. Behind a single `extractLeadCard()` function.
 - **Validation:** Zod, schema shared by API and UI
 - **UI:** Tailwind, no component library
 - **State:** none server-side. Optional Vercel KV 24h domain cache — feature-flagged
@@ -272,7 +272,7 @@ The SSRF guard and the Zod+repair retry are the **only** two non-obvious things 
 
 ## 14. FINAL VERDICT
 
-**Recommended architecture.** Build a single Next.js 14 (App Router, TypeScript) app with one Node-runtime route handler `POST /api/decode` that runs a linear pipeline: normalize+SSRF-guard → static fetch with timeouts → Readability/cheerio extraction → conditional `/about` → truncate → one DeepSeek call (`deepseek-v4-flash`, thinking disabled, `json_object` mode, explicit JSON directive) → Zod validate → mandatory repair retry → backoff on 429/500/503 → banned-phrase opener check. No database, no auth, no queue, no headless browser.
+**Recommended architecture.** Build a single Next.js 14 (App Router, TypeScript) app with one Node-runtime route handler `POST /api/decode` that runs a linear pipeline: normalize+SSRF-guard → static fetch with timeouts → Readability/cheerio extraction → conditional `/about` → truncate → one DeepSeek call (`deepseek-chat`, thinking disabled, `json_object` mode, explicit JSON directive) → Zod validate → mandatory repair retry → backoff on 429/500/503 → banned-phrase opener check. No database, no auth, no queue, no headless browser.
 
 **"Build this next" checklist:**
 - [ ] 1. Scaffold Next.js + TS + Tailwind; one page with domain input and result area

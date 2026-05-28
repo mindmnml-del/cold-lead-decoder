@@ -14,10 +14,12 @@ const mkResp = (content: string): CreateResponse => ({
 });
 
 function mkOkCreate(content = "{}"): {
-  create: ReturnType<typeof vi.fn<[CreateRequest], Promise<CreateResponse>>>;
+  create: ReturnType<
+    typeof vi.fn<(req: CreateRequest) => Promise<CreateResponse>>
+  >;
 } {
-  const create = vi.fn<[CreateRequest], Promise<CreateResponse>>(async () =>
-    mkResp(content),
+  const create = vi.fn<(req: CreateRequest) => Promise<CreateResponse>>(
+    async () => mkResp(content),
   );
   return { create };
 }
@@ -29,8 +31,8 @@ class HttpError extends Error {
 }
 
 describe("DeepSeek client — ADR-004 config", () => {
-  it("D1: exports DEEPSEEK_MODEL === 'deepseek-v4-flash'", () => {
-    expect(DEEPSEEK_MODEL).toBe("deepseek-v4-flash");
+  it("D1: exports DEEPSEEK_MODEL === 'deepseek-chat'", () => {
+    expect(DEEPSEEK_MODEL).toBe("deepseek-chat");
   });
 
   it("D2: exports DEEPSEEK_BASE_URL pointing at api.deepseek.com", () => {
@@ -103,7 +105,7 @@ describe("DeepSeek client — backoff (ADR-004)", () => {
       }) as typeof globalThis.setTimeout);
 
     const create = vi
-      .fn<[CreateRequest], Promise<CreateResponse>>()
+      .fn<(req: CreateRequest) => Promise<CreateResponse>>()
       .mockRejectedValueOnce(new HttpError(429))
       .mockRejectedValueOnce(new HttpError(429))
       .mockResolvedValueOnce(mkResp("{}"));
@@ -136,7 +138,7 @@ describe("DeepSeek client — backoff (ADR-004)", () => {
         }) as typeof globalThis.setTimeout);
 
       const create = vi
-        .fn<[CreateRequest], Promise<CreateResponse>>()
+        .fn<(req: CreateRequest) => Promise<CreateResponse>>()
         .mockRejectedValueOnce(new HttpError(status))
         .mockResolvedValueOnce(mkResp("{}"));
 
@@ -154,7 +156,7 @@ describe("DeepSeek client — backoff (ADR-004)", () => {
 
   it("D8: does NOT retry on HTTP 400", async () => {
     const create = vi
-      .fn<[CreateRequest], Promise<CreateResponse>>()
+      .fn<(req: CreateRequest) => Promise<CreateResponse>>()
       .mockRejectedValueOnce(new HttpError(400));
 
     await expect(
@@ -185,7 +187,7 @@ describe("createDeepSeekFn — retry wiring (ADR-004)", () => {
       }) as typeof globalThis.setTimeout);
 
     const rawCreate = vi
-      .fn<[CreateRequest], Promise<CreateResponse>>()
+      .fn<(req: CreateRequest) => Promise<CreateResponse>>()
       .mockRejectedValueOnce(new HttpError(429))
       .mockResolvedValueOnce(mkResp("{}"));
 

@@ -6,7 +6,7 @@
 
 - **Framework:** Next.js 14 (App Router, TypeScript)
 - **API:** one Route Handler `POST /api/decode`, Node runtime (not Edge, not Server Action)
-- **LLM:** DeepSeek via OpenAI SDK — model `deepseek-v4-flash`, **thinking disabled**, `response_format: { type: "json_object" }`, capped `max_tokens`, exponential backoff on 429/500/503
+- **LLM:** DeepSeek via OpenAI SDK — model `deepseek-chat`, **thinking disabled**, `response_format: { type: "json_object" }`, capped `max_tokens`, exponential backoff on 429/500/503
 - **Validation:** Zod (single source of truth for API + UI)
 - **Testing:** Vitest
 - **Scraping:** native `fetch` + `@mozilla/readability` + `jsdom`; `cheerio` fallback
@@ -25,7 +25,7 @@ Not Edge (Readability/jsdom need Node). Not Server Action (no curlable contract,
 No headless browser in v1. Detect thin content → fetch `/about` once → if still thin, set `degraded=true` and continue (never abort). Hard caps: 8s timeout, ≤3 redirects, ~1.5 MB body cap, real User-Agent. Source: §4, §6, §13.
 
 ### ADR-004 — LLM: DeepSeek `deepseek-chat`, thinking disabled, JSON mode + mandatory repair retry
-DeepSeek's `json_object` mode guarantees parseable JSON, **not schema-valid** JSON (no Anthropic-style tool enforcement). System prompt must explicitly direct the model to return a single JSON object. Backoff on 429/500/503. One repair call on Zod failure. Hard fail after second failure. Source: §3, §4 steps 7–8, §8, §10, §14.
+DeepSeek's `json_object` mode guarantees parseable JSON, **not schema-valid** JSON (no Anthropic-style tool enforcement). System prompt must explicitly direct the model to return a single JSON object. Backoff on 429/500/503. One repair call on Zod failure. Hard fail after second failure. `deepseek-chat` intentionally used over `deepseek-v4-flash` for JSON mode reliability; v4-flash can be re-evaluated via A/B eval harness when needed. Source: §3, §4 steps 7–8, §8, §10, §14.
 
 ### ADR-005 — Schema: Zod as single source of truth, shared by API + UI
 `lib/schema/leadCard.ts` is the contract. Rules enforced in Zod, not just the prompt: `follow_up_angles` length exactly 2; `positioning_signals` 2–4; `likely_pain_points` 2–3; every string non-empty and length-capped; `source_pages` ⊆ pages actually fetched. **Project deviation from arch §5:** `evidence.opener_basis` is **required** in the schema (arch doc had it optional-in-Zod / required-in-prompt; constitution locks it as schema-required to prevent silent prompt drift). Source: §3, §5, §10.
@@ -49,5 +49,5 @@ No `shadcn/ui`, Radix, MUI, Headless UI, Chakra, DaisyUI, or any pre-built compo
 - **TDD Iron Law:** RED → GREEN → REFACTOR → ANALYZE. No production code before a failing test.
 - **GitNexus commands:** always invoke the direct binary `gitnexus` (not via `npx`) and always pass `--skip-agents-md`, e.g., `gitnexus analyze --skip-agents-md`. The `npx` shim crashes under Node 20.
 - **Skill invocation:** use slash commands (`/brainstorming`, `/review`), not `superpowers:*` or other namespaced forms.
-- **LLM call shape:** `deepseek-v4-flash`, thinking disabled, `json_object` mode, explicit "return one JSON object only" directive, capped `max_tokens`.
+- **LLM call shape:** `deepseek-chat`, thinking disabled, `json_object` mode, explicit "return one JSON object only" directive, capped `max_tokens`.
 - **Out of scope for v1** (cut list): headless browser, multi-page crawl, provider router, DB, auth, queue, two-stage prompts, component library, streaming, settings/themes.

@@ -59,7 +59,7 @@ const input = {
 describe("generateLeadCard — repair retry (ADR-005)", () => {
   it("R1: [REPAIR ATTEMPT] retries once on Zod failure and succeeds", async () => {
     const create = vi
-      .fn<[CreateRequest], Promise<CreateResponse>>()
+      .fn<(req: CreateRequest) => Promise<CreateResponse>>()
       .mockResolvedValueOnce(mkResp(invalidCardJsonA))
       .mockResolvedValueOnce(mkResp(validCardJson));
 
@@ -75,7 +75,7 @@ describe("generateLeadCard — repair retry (ADR-005)", () => {
 
   it("R2: [REPAIR ATTEMPT] repair prompt includes Zod error path and message", async () => {
     const create = vi
-      .fn<[CreateRequest], Promise<CreateResponse>>()
+      .fn<(req: CreateRequest) => Promise<CreateResponse>>()
       .mockResolvedValueOnce(mkResp(invalidCardJsonA))
       .mockResolvedValueOnce(mkResp(validCardJson));
 
@@ -104,7 +104,7 @@ describe("generateLeadCard — repair retry (ADR-005)", () => {
 
   it("R3: [REPAIR ATTEMPT] repair prompt includes the prior assistant output verbatim", async () => {
     const create = vi
-      .fn<[CreateRequest], Promise<CreateResponse>>()
+      .fn<(req: CreateRequest) => Promise<CreateResponse>>()
       .mockResolvedValueOnce(mkResp(invalidCardJsonA))
       .mockResolvedValueOnce(mkResp(validCardJson));
 
@@ -126,7 +126,7 @@ describe("generateLeadCard — repair retry (ADR-005)", () => {
 describe("generateLeadCard — hard fail (ADR-005)", () => {
   it("R4: [HARD FAIL] throws LeadCardValidationError after two consecutive Zod failures", async () => {
     const create = vi
-      .fn<[CreateRequest], Promise<CreateResponse>>()
+      .fn<(req: CreateRequest) => Promise<CreateResponse>>()
       .mockResolvedValueOnce(mkResp(invalidCardJsonA))
       .mockResolvedValueOnce(mkResp(invalidCardJsonB));
 
@@ -140,7 +140,7 @@ describe("generateLeadCard — hard fail (ADR-005)", () => {
 
   it("R5: [HARD FAIL] does NOT issue a third call", async () => {
     const create = vi
-      .fn<[CreateRequest], Promise<CreateResponse>>()
+      .fn<(req: CreateRequest) => Promise<CreateResponse>>()
       .mockResolvedValueOnce(mkResp(invalidCardJsonA))
       .mockResolvedValueOnce(mkResp(invalidCardJsonB));
 
@@ -156,7 +156,7 @@ describe("generateLeadCard — hard fail (ADR-005)", () => {
 
   it("R6: [HARD FAIL] preserves both raw outputs and ZodIssue arrays on the error", async () => {
     const create = vi
-      .fn<[CreateRequest], Promise<CreateResponse>>()
+      .fn<(req: CreateRequest) => Promise<CreateResponse>>()
       .mockResolvedValueOnce(mkResp(invalidCardJsonA))
       .mockResolvedValueOnce(mkResp(invalidCardJsonB));
 
