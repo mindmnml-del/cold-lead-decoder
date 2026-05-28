@@ -1,9 +1,11 @@
 # Cold Lead Decoder
+## Demo
 
-> Domain in → structured, evidence-grounded lead card out.
+**Video walkthrough:** [Watch the 90-second Loom demo](https://www.loom.com/share/0405f48b55ea4624ac8b3a7c5243b234)
+
+One company domain -> static scrape -> DeepSeek JSON -> Zod-validated lead card with evidence, confidence notes, and eval metrics.
 
 **Live demo:** https://coldl.vercel.app
-
 ## What it does
 
 Cold Lead Decoder is a single-route service for B2B outbound research. A user pastes a company domain; the app statically scrapes the homepage (and, conditionally, `/about`), runs the extracted text through DeepSeek in strict JSON mode, validates the response against a Zod contract, and returns a lead card containing a one-paragraph summary, positioning signals, likely pain points, a personalized opener grounded in a concrete trigger from the company's own pages, and two follow-up angles. There is no database, no auth, and no queue — the whole pipeline lives in one Node route handler (`POST /api/decode`) and runs a linear five-stage flow: **fetch → extract → generate → validate → guard**.
